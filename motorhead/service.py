@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Callable, Coroutine, Generator, Iterable, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, nullcontext
+
+from fixtures.database_fixture import database
 from typing import TYPE_CHECKING, Any, Generic, TypeVar, get_args
 
 from bson import ObjectId
@@ -558,7 +560,7 @@ class Service(Generic[TInsert, TUpdate]):
         )
 
     async def insert_one(
-        self, data: TInsert, *, options: InsertOneOptions | None = None
+        self, data: TInsert, *, options: InsertOneOptions | None = None, dump_only_set_fields: bool = True
     ) -> InsertOneResult:
         """
         Inserts the given data into the collection.
@@ -566,15 +568,17 @@ class Service(Generic[TInsert, TUpdate]):
         Arguments:
             data: The data to be inserted.
             options: Insert options, see the arguments of `collection.insert_one()` for details.
+            dump_only_set_fields: Insert fields that are explicitly set in the constructor.
 
         Returns:
             The result of the operation.
 
         Raises:
             Exception: If the data is invalid.
+
         """
         return await self.collection.insert_one(  # type: ignore[no-any-return]
-            await self._prepare_for_insert(data),
+            await self._prepare_for_insert(data = data, dump_only_set_fields = dump_only_set_fields),
             **(options or {}),
         )
 
@@ -711,7 +715,7 @@ class Service(Generic[TInsert, TUpdate]):
 
         return result
 
-    async def _convert_for_insert(self, data: TInsert) -> dict[str, Any]:
+    async def _convert_for_insert(self, data: TInsert,  dump_only_set_fields: bool = True ) -> dict[str, Any]:
         """
         Converts the given piece of the into its database representation.
 
@@ -726,7 +730,7 @@ class Service(Generic[TInsert, TUpdate]):
         Raises:
             Exception: If the data is invalid.
         """
-        return self._mongo_dump(data)
+        return self._mongo_dump(data, dump_only_set_fields=dump_only_set_fields)
 
     async def _convert_for_update(self, data: TUpdate) -> UpdateObject | Sequence[UpdateObject]:
         """
@@ -790,7 +794,7 @@ class Service(Generic[TInsert, TUpdate]):
 
         return start_session
 
-    def _mongo_dump(self, data: BaseModel) -> dict[str, Any]:
+    def _mongo_dump(self, data: BaseModel, dump_only_set_fields: bool = True) -> dict[str, Any]:
         """
         Dumps the given model instance for consumption by MongoDB.
 
@@ -807,18 +811,18 @@ class Service(Generic[TInsert, TUpdate]):
                 for k, v in data.model_dump(
                     include=objectid_fields,
                     by_alias=True,
-                    exclude_unset=True,
+                    exclude_unset=dump_only_set_fields,
                 ).items()
             },
             **data.model_dump(
                 exclude=objectid_fields,
                 by_alias=True,
-                exclude_unset=True,
+                exclude_unset=dump_only_set_fields,
             ),
         }
 
     async def _prepare_for_insert(
-        self, data: TInsert, query: ClauseOrMongoQuery | None = None
+        self, data: TInsert, query: ClauseOrMongoQuery | None = None, dump_only_set_fields: bool = True
     ) -> dict[str, Any]:
         """
         Validates the given piece of data and converts it into its database representation
@@ -835,7 +839,7 @@ class Service(Generic[TInsert, TUpdate]):
             Exception: If the data is invalid.
         """
         await self._validate_insert(data, query)
-        return await self._convert_for_insert(data)
+        return await self._convert_for_insert(data, dump_only_set_fields=dump_only_set_fields)
 
     async def _prepare_for_update(
         self, data: TUpdate, query: ClauseOrMongoQuery | None
