@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator, Callable, Coroutine, Generator, Iterable, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, nullcontext
 
-from fixtures.database_fixture import database
 from typing import TYPE_CHECKING, Any, Generic, TypeVar, get_args
 
 from bson import ObjectId
